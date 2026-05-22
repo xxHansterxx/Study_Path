@@ -1,1 +1,1 @@
-# WebsiteFun.github.io
+# StudyPath.github.io
