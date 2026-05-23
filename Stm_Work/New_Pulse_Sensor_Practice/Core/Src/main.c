@@ -43,7 +43,8 @@
 /* Private variables ---------------------------------------------------------*/
 
 COM_InitTypeDef BspCOMInit;
-ADC_HandleTypeDef hadc1;
+
+TIM_HandleTypeDef htim5;
 
 /* Definitions for defaultTask */
 osThreadId_t defaultTaskHandle;
@@ -52,28 +53,14 @@ const osThreadAttr_t defaultTask_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
-/* Definitions for sensorTask */
-osThreadId_t sensorTaskHandle;
-const osThreadAttr_t sensorTask_attributes = {
-  .name = "sensorTask",
-  .stack_size = 128 * 4,
+/* Definitions for prvTask_pulse */
+osThreadId_t prvTask_pulseHandle;
+const osThreadAttr_t prvTask_pulse_attributes = {
+  .name = "prvTask_pulse",
+  .stack_size = 192 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
-/* Definitions for SensorDataQueue */
-osMessageQueueId_t SensorDataQueueHandle;
-const osMessageQueueAttr_t SensorDataQueue_attributes = {
-  .name = "SensorDataQueue"
-};
-
 /* USER CODE BEGIN PV */
-#define THRESHOLD 50
-
-double CurrentTime;
-double LastTime;
-double TimeDifference;
-int BPM;
-int BeatDetected;
-uint8_t HeartBeatValue;
 
 /* USER CODE END PV */
 
@@ -81,9 +68,9 @@ uint8_t HeartBeatValue;
 void SystemClock_Config(void);
 static void MPU_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_ADC1_Init(void);
+static void MX_TIM5_Init(void);
 void StartDefaultTask(void *argument);
-void sensorTaskHandler(void *argument);
+void Pulse(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -126,7 +113,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_ADC1_Init();
+  MX_TIM5_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -146,10 +133,6 @@ int main(void)
   /* start timers, add new ones, ... */
   /* USER CODE END RTOS_TIMERS */
 
-  /* Create the queue(s) */
-  /* creation of SensorDataQueue */
-  SensorDataQueueHandle = osMessageQueueNew (10, sizeof(uint16_t), &SensorDataQueue_attributes);
-
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
   /* USER CODE END RTOS_QUEUES */
@@ -158,8 +141,8 @@ int main(void)
   /* creation of defaultTask */
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
-  /* creation of sensorTask */
-  sensorTaskHandle = osThreadNew(sensorTaskHandler, NULL, &sensorTask_attributes);
+  /* creation of prvTask_pulse */
+  prvTask_pulseHandle = osThreadNew(Pulse, NULL, &prvTask_pulse_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -268,70 +251,54 @@ void SystemClock_Config(void)
 }
 
 /**
-  * @brief ADC1 Initialization Function
+  * @brief TIM5 Initialization Function
   * @param None
   * @retval None
   */
-static void MX_ADC1_Init(void)
+static void MX_TIM5_Init(void)
 {
 
-  /* USER CODE BEGIN ADC1_Init 0 */
+  /* USER CODE BEGIN TIM5_Init 0 */
 
-  /* USER CODE END ADC1_Init 0 */
+  /* USER CODE END TIM5_Init 0 */
 
-  ADC_MultiModeTypeDef multimode = {0};
-  ADC_ChannelConfTypeDef sConfig = {0};
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_SlaveConfigTypeDef sSlaveConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
 
-  /* USER CODE BEGIN ADC1_Init 1 */
+  /* USER CODE BEGIN TIM5_Init 1 */
 
-  /* USER CODE END ADC1_Init 1 */
-
-  /** Common config
-  */
-  hadc1.Instance = ADC1;
-  hadc1.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV16;
-  hadc1.Init.Resolution = ADC_RESOLUTION_10B;
-  hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
-  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
-  hadc1.Init.LowPowerAutoWait = DISABLE;
-  hadc1.Init.ContinuousConvMode = DISABLE;
-  hadc1.Init.NbrOfConversion = 1;
-  hadc1.Init.DiscontinuousConvMode = DISABLE;
-  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
-  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
-  hadc1.Init.ConversionDataManagement = ADC_CONVERSIONDATA_DR;
-  hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
-  hadc1.Init.LeftBitShift = ADC_LEFTBITSHIFT_NONE;
-  hadc1.Init.OversamplingMode = DISABLE;
-  if (HAL_ADC_Init(&hadc1) != HAL_OK)
+  /* USER CODE END TIM5_Init 1 */
+  htim5.Instance = TIM5;
+  htim5.Init.Prescaler = 0;
+  htim5.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim5.Init.Period = 10;
+  htim5.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim5.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim5) != HAL_OK)
   {
     Error_Handler();
   }
-
-  /** Configure the ADC multi-mode
-  */
-  multimode.Mode = ADC_MODE_INDEPENDENT;
-  if (HAL_ADCEx_MultiModeConfigChannel(&hadc1, &multimode) != HAL_OK)
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim5, &sClockSourceConfig) != HAL_OK)
   {
     Error_Handler();
   }
-
-  /** Configure Regular Channel
-  */
-  sConfig.Channel = ADC_CHANNEL_5;
-  sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
-  sConfig.SingleDiff = ADC_SINGLE_ENDED;
-  sConfig.OffsetNumber = ADC_OFFSET_NONE;
-  sConfig.Offset = 0;
-  sConfig.OffsetSignedSaturation = DISABLE;
-  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  sSlaveConfig.SlaveMode = TIM_SLAVEMODE_DISABLE;
+  sSlaveConfig.InputTrigger = TIM_TS_ITR0;
+  if (HAL_TIM_SlaveConfigSynchro(&htim5, &sSlaveConfig) != HAL_OK)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN ADC1_Init 2 */
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim5, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM5_Init 2 */
 
-  /* USER CODE END ADC1_Init 2 */
+  /* USER CODE END TIM5_Init 2 */
 
 }
 
@@ -342,6 +309,7 @@ static void MX_ADC1_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
   /* USER CODE BEGIN MX_GPIO_Init_1 */
 
   /* USER CODE END MX_GPIO_Init_1 */
@@ -349,7 +317,24 @@ static void MX_GPIO_Init(void)
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : PA8 */
+  GPIO_InitStruct.Pin = GPIO_PIN_8;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PB6 */
+  GPIO_InitStruct.Pin = GPIO_PIN_6;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
@@ -378,52 +363,42 @@ void StartDefaultTask(void *argument)
   /* USER CODE END 5 */
 }
 
-/* USER CODE BEGIN Header_sensorTaskHandler */
+void Pulse_frequency(void)
+{
+	if(___HAL_TIM_GET_FLAG(&htim5, TIM_FLAG_UPDATE) == 1)
+	{
+		pulse_count = 6000/count_interval_cycle;
+		count_interval_cycle = 0;
+		trigger_flag = 0;
+	}
+}
+
+/* USER CODE BEGIN Header_Pulse */
 /**
-* @brief Function implementing the sensorTask thread.
+* @brief Function implementing the prvTask_pulse thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_sensorTaskHandler */
-void sensorTaskHandler(void *argument)
+/* USER CODE END Header_Pulse */
+void Pulse(void *argument)
 {
-  /* USER CODE BEGIN sensorTaskHandler */
-	/* Infinite loop */
-	for (;;)
+  /* USER CODE BEGIN Pulse */
+  /* Infinite loop */
+	while(1)
 	{
-		HAL_ADC_Start (&hadc1);
-		HAL_ADC_PollForConversion (&hadc1, 100);
-		HeartBeatValue = HAL_ADC_GetValue (&hadc1);
-		HAL_ADC_Stop (&hadc1);
-
-
-		if ((HeartBeatValue > THRESHOLD) && (BeatDetected == 0))
-		{
-		    BeatDetected = 1;
-
-		    LastTime = CurrentTime;
-		    CurrentTime = HAL_GetTick();
-
-		    TimeDifference = CurrentTime - LastTime;
-
-		    if (TimeDifference > 0)
-		    {
-		        BPM = 60000 / TimeDifference;
-		    }
-		}
-
-		else if (HeartBeatValue < THRESHOLD)
-		{
-		    BeatDetected = 0;
-		}
-
-		printf("Heart Beat Value: %lu\r\n", HeartBeatValue);
-		printf("BPM: %i\r\n", BPM);
-
-		osDelay(20);
+		Pulse_frequency();
+		vTaskDelay(10/portTICK_RATE_MS);
 	}
+  /* USER CODE END Pulse */
+}
 
-  /* USER CODE END sensorTaskHandler */
+void EXTI15_5_IRQHandler(void)
+{
+	if(EXTI_GetITStatus(EXTI_LINE8) != RESET)
+	{
+		EXTI_ClearITPending(EXTI_LINE8);
+		trigger_flag = 1;
+	}
 }
 
  /* MPU Configuration */
