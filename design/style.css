@@ -1,3 +1,22 @@
+/*References*/
+.reference
+{
+  text-align: center;
+}
+.reference_buttons
+{
+  text-align: center;
+  margin-top: 0px;
+  height: auto;
+  width: auto;
+
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+
+
+}
+
 /*HTML page content styling*/
 .checklist
 {
@@ -27,7 +46,18 @@
     margin-right: auto;
     margin-bottom: 10px;
 }
-/*Progress bar*/
+
+.mindmap
+{
+    width: 1200px;
+    height: 475px;
+    
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+    margin-bottom: 10px;
+}
+/*Progress bar (see reference)*/
 *,
 *:after,
 *:before {
