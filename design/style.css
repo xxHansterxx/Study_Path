@@ -245,16 +245,19 @@ header
     justify-content: center;
 }
 
-body 
-{ 
-    color: rgb(0, 0, 0);
-    background: rgb(255, 255, 255);
-    margin: 0px;
+body
+{
+    margin: 0;
+
+    background-image: url('cloud_background.png');
+    background-size: cover;
+    background-attachment: fixed;
+    background-position: center;
 }
 
 footer
 {
     min-height: 150px;
     background-image: url('background.jpg');
-    background-size: cover;
+    background-size: auto;
 }
