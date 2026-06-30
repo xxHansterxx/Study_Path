@@ -2,10 +2,12 @@
 .reference
 {
   text-align: center;
+  
 }
 .reference_buttons
 {
   text-align: center;
+  margin: 5px;
   margin-top: 0px;
   height: auto;
   width: auto;
@@ -212,6 +214,7 @@
     height: 209px;
     float: right;
     margin-left: 50px;
+    margin-right: 10px;
 }
 
 /* Home page title styling */
